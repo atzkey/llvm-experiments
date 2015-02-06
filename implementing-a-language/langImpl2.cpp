@@ -15,7 +15,7 @@
 
 /*
   Compile:
-  clang++ -g -O3 langImpl.cpp `/usr/local/Cellar/llvm/3.5.1/bin/llvm-config --cxxflags --ldflags --system-libs --libs core` -o langImpl
+  clang++ -g -O3 -Wall -Wpedantic langImpl2.cpp `/usr/local/Cellar/llvm/3.5.1/bin/llvm-config --cxxflags --ldflags --system-libs --libs core` -o langImpl
 */
 
 //===----------------------------------------------------------------------===//
@@ -593,6 +593,9 @@ int main() {
 
   // Run the main "interpreter loop" now.
   MainLoop();
+
+  // Print out all of the generated code.
+  TheModule->dump();
 
   return 0;
 }
