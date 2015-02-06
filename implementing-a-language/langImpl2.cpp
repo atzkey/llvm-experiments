@@ -184,6 +184,7 @@ static int GetTokPrecedence() {
 /// Error* - These are little helper functions for error handling.
 ExprAST *Error(const char *Str) { fprintf(stderr, "Error: %s\n", Str);return 0;}
 PrototypeAST *ErrorP(const char *Str) { Error(Str); return 0; }
+FunctionAST *ErrorF(const char *Str) { Error(Str); return 0; }
 
 static ExprAST *ParseExpression();
 
@@ -408,6 +409,109 @@ llvm::Value *CallExprAST::Codegen() {
   }
 
   return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+llvm::Function *PrototypeAST::Codegen() {
+  // Make the function type:  double(double,double) etc.
+  std::vector<llvm::Type*> Doubles(
+    Args.size(),
+    llvm::Type::getDoubleTy(llvm::getGlobalContext())
+  );
+
+
+  llvm::FunctionType *FT = llvm::FunctionType::get(
+    llvm::Type::getDoubleTy(llvm::getGlobalContext()), // returns Double
+    Doubles,  // Doubles.size() double arguments
+    false // does not feature varargs
+  );
+
+  llvm::Function *F = llvm::Function::Create(
+    FT,
+    // ExternalLinkage means that the function may be defined outside the current module
+    // and/or that it is callable by functions outside the module
+    llvm::Function::ExternalLinkage,
+    // Nothing special (no mangling, for example) since the function is being registered under
+    // TheModule, so no conflicts/redefines; just passing the name as specified by user and parsed
+    Name,
+    TheModule
+  );
+
+  // Exploiting the fact that if something with this name already exists inside TheModule,
+  // LLVM renames it to avoid conflicts;
+  // If the function has a body, don't allow redefinition or reextern.
+  if (F->getName() != Name) {
+    // Delete the one we just made and get the existing one.
+    F->eraseFromParent();
+    F = TheModule->getFunction(Name);
+
+    // If F already has a body, reject this.
+    if (!F->empty()) {
+      ErrorF("redefinition of function");
+      return 0;
+    }
+
+    // If F took a different number of args, reject.
+    if (F->arg_size() != Args.size()) {
+      ErrorF("redefinition of function with different # args");
+      return 0;
+    }
+  }
+
+  // Set names for all arguments.
+  unsigned Idx = 0;
+  for (llvm::Function::arg_iterator AI = F->arg_begin(); Idx != Args.size(); ++AI, ++Idx) {
+    AI->setName(Args[Idx]);
+
+    // Add arguments to variable symbol table
+    // TODO: conflict checks [e.g. situations like foo(a, b, a); note two "a"s]
+    NamedValues[Args[Idx]] = AI;
+  }
+
+  return F;
+}
+
+llvm::Function *FunctionAST::Codegen() {
+  NamedValues.clear();
+
+  // Create a prototype where the function body will be inserted
+  llvm::Function *TheFunction = Proto->Codegen();
+  if (TheFunction == 0)
+    return 0;
+
+  // Create a new basic block to start insertion into.
+  llvm::BasicBlock *BB = llvm::BasicBlock::Create(llvm::getGlobalContext(), "entry", TheFunction);
+  Builder.SetInsertPoint(BB);
+
+  if (llvm::Value *RetVal = Body->Codegen()) {
+    // Finish off the function.
+    Builder.CreateRet(RetVal);
+
+    // Validate the generated code, checking for consistency.
+    verifyFunction(*TheFunction);
+
+    return TheFunction;
+  }
+
+  // Worst-case scenario;
+  // Error reading body, remove function.
+  TheFunction->eraseFromParent();
+
+  /* FIXME: Note from a tutorial:
+    The only piece left here is handling of the error case. For simplicity,
+    we handle this by merely deleting the function we produced with the eraseFromParent method.
+    This allows the user to redefine a function that they incorrectly typed in before:
+    if we didn’t delete it, it would live in the symbol table, with a body, preventing future redefinition.
+
+    This code does have a bug, though. Since the PrototypeAST::Codegen can return a previously defined
+    forward declaration, our code can actually delete a forward declaration.
+    There are a number of ways to fix this bug, see what you can come up with! Here is a testcase:
+    ```
+    extern foo(a b);     # ok, defines foo.
+    def foo(a b) c;      # error, 'c' is invalid.
+    def bar() foo(1, 2); # error, unknown function "foo"
+    ```
+  */
+  return 0;
 }
 //===----------------------------------------------------------------------===//
 // Top-Level parsing
