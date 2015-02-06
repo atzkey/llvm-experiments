@@ -362,19 +362,52 @@ static llvm::IRBuilder<> Builder(llvm::getGlobalContext());
 static std::map<std::string, llvm::Value*> NamedValues;
 
 llvm::Value *NumberExprAST::Codegen() {
-  return 0;
+  return llvm::ConstantFP::get(llvm::getGlobalContext(), llvm::APFloat(Val));
 }
 
 llvm::Value *VariableExprAST::Codegen() {
-  return 0;
+  // Look this variable up in the function.
+  llvm::Value *V = NamedValues[Name];
+  return V ? V : ErrorV("Unknown variable name");
 }
 
 llvm::Value *BinaryExprAST::Codegen() {
-  return 0;
+  // Recursion
+  llvm::Value *L = LHS->Codegen();
+  llvm::Value *R = RHS->Codegen();
+  if (L == 0 || R == 0) return 0;
+
+  switch (Op) {
+  case '+': return Builder.CreateFAdd(L, R, "addtmp");
+  case '-': return Builder.CreateFSub(L, R, "subtmp");
+  case '*': return Builder.CreateFMul(L, R, "multmp");
+  case '<':
+    L = Builder.CreateFCmpULT(L, R, "cmptmp");
+    // Convert bool 0/1 to double 0.0 or 1.0 (UIToFP opposed to signed variant SIToFP)
+    // (since all the types are floats in this language)
+    return Builder.CreateUIToFP(L, llvm::Type::getDoubleTy(llvm::getGlobalContext()),
+                                "booltmp");
+  default: return ErrorV("invalid binary operator");
+  }
 }
 
 llvm::Value *CallExprAST::Codegen() {
-  return 0;
+  // Look up the name in the global module table (where all the functions are JIT-compiled)
+  llvm::Function *CalleeF = TheModule->getFunction(Callee);
+  if (CalleeF == 0)
+    return ErrorV("Unknown function referenced");
+
+  // If argument mismatch error.
+  if (CalleeF->arg_size() != Args.size())
+    return ErrorV("Incorrect # arguments passed");
+
+  std::vector<llvm::Value*> ArgsV;
+  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+    ArgsV.push_back(Args[i]->Codegen());
+    if (ArgsV.back() == 0) return 0;
+  }
+
+  return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
 }
 //===----------------------------------------------------------------------===//
 // Top-Level parsing
