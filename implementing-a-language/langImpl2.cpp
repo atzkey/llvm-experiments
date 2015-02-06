@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#define debug(M, ...) fprintf(stderr, "DEBUG %s:%d: " #M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+
 /*
   Compile:
   clang++ -g -O3 langImpl.cpp `/usr/local/Cellar/llvm/3.5.1/bin/llvm-config --cxxflags --ldflags --system-libs --libs core` -o langImpl
@@ -514,12 +516,15 @@ llvm::Function *FunctionAST::Codegen() {
   return 0;
 }
 //===----------------------------------------------------------------------===//
-// Top-Level parsing
+// Top-Level parsing and JIT driver
 //===----------------------------------------------------------------------===//
 
 static void HandleDefinition() {
-  if (ParseDefinition()) {
-    fprintf(stderr, "Parsed a function definition.\n");
+  if (FunctionAST *F = ParseDefinition()) {
+    if (llvm::Function *LF = F->Codegen()) {
+      fprintf(stderr, "Function definition:");
+      LF->dump();
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -527,8 +532,11 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-  if (ParseExtern()) {
-    fprintf(stderr, "Parsed an extern\n");
+  if (PrototypeAST *P = ParseExtern()) {
+    if (llvm::Function *F = P->Codegen()) {
+      fprintf(stderr, "Extern: ");
+      F->dump();
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -537,8 +545,11 @@ static void HandleExtern() {
 
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
-  if (ParseTopLevelExpr()) {
-    fprintf(stderr, "Parsed a top-level expr\n");
+  if (FunctionAST *F = ParseTopLevelExpr()) {
+    if (llvm::Function *LF = F->Codegen()) {
+      fprintf(stderr, "Top-level expression:");
+      LF->dump();
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -570,6 +581,11 @@ int main() {
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40;  // highest.
+
+  llvm::LLVMContext &Context = llvm::getGlobalContext();
+  // Make the module, which holds all the code.
+  TheModule = new llvm::Module("my cool jit", Context);
+
 
   // Prime the first token.
   fprintf(stderr, "ready> ");
