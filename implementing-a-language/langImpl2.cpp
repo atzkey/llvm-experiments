@@ -362,13 +362,20 @@ static llvm::IRBuilder<> Builder(llvm::getGlobalContext());
 static std::map<std::string, llvm::Value*> NamedValues;
 
 llvm::Value *NumberExprAST::Codegen() {
-  return llvm::ConstantFP::get(llvm::getGlobalContext(), llvm::APFloat(Val));
+  return 0;
 }
 
 llvm::Value *VariableExprAST::Codegen() {
-
+  return 0;
 }
 
+llvm::Value *BinaryExprAST::Codegen() {
+  return 0;
+}
+
+llvm::Value *CallExprAST::Codegen() {
+  return 0;
+}
 //===----------------------------------------------------------------------===//
 // Top-Level parsing
 //===----------------------------------------------------------------------===//
