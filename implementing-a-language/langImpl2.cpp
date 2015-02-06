@@ -1,3 +1,9 @@
+#include "llvm/IR/Verifier.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -85,6 +91,7 @@ namespace {
 class ExprAST {
 public:
   virtual ~ExprAST() {}
+  virtual llvm::Value *Codegen() = 0;
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
@@ -92,6 +99,7 @@ class NumberExprAST : public ExprAST {
   double Val;
 public:
   NumberExprAST(double val): Val(val) {}
+  virtual llvm::Value *Codegen();
 };
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
@@ -100,6 +108,7 @@ class VariableExprAST : public ExprAST {
 public:
   VariableExprAST(const std::string &name)
     : Name(name) {}
+  virtual llvm::Value *Codegen();
 };
 
 /// BinaryExprAST - Expression class for a binary operator.
@@ -109,6 +118,7 @@ class BinaryExprAST : public ExprAST {
 public:
   BinaryExprAST(char op, ExprAST *lhs, ExprAST *rhs)
     : Op(op), LHS(lhs), RHS(rhs) {}
+  virtual llvm::Value *Codegen();
 };
 
 /// CallExprAST - Expression class for function calls.
@@ -118,6 +128,7 @@ class CallExprAST : public ExprAST {
 public:
   CallExprAST(const std::string &callee, std::vector<ExprAST*> &args)
     : Callee(callee), Args(args) {}
+  virtual llvm::Value *Codegen();
 };
 
 /// PrototypeAST - This class represents the "prototype" for a function,
@@ -129,6 +140,7 @@ class PrototypeAST {
 public:
   PrototypeAST(const std::string &name, const std::vector<std::string> &args)
     : Name(name), Args(args) {}
+  llvm::Function *Codegen();
 };
 
 /// FunctionAST - This class represents a function definition itself.
@@ -138,6 +150,7 @@ class FunctionAST {
 public:
   FunctionAST(PrototypeAST *proto, ExprAST *body)
     : Proto(proto), Body(body) {}
+  llvm::Function *Codegen();
 };
 } // end anonymous namespace
 
@@ -332,6 +345,28 @@ static FunctionAST *ParseTopLevelExpr() {
 static PrototypeAST *ParseExtern() {
   getNextToken();  // eat extern.
   return ParsePrototype();
+}
+
+//===----------------------------------------------------------------------===//
+// Code generation
+//===----------------------------------------------------------------------===//
+// Container for codegen errors
+llvm::Value *ErrorV(const char *Str) { Error(Str); return 0; }
+
+// Top-level module
+static llvm::Module *TheModule;
+
+static llvm::IRBuilder<> Builder(llvm::getGlobalContext());
+
+// Keeping track of defined values (symbol table)
+static std::map<std::string, llvm::Value*> NamedValues;
+
+llvm::Value *NumberExprAST::Codegen() {
+  return llvm::ConstantFP::get(llvm::getGlobalContext(), llvm::APFloat(Val));
+}
+
+llvm::Value *VariableExprAST::Codegen() {
+
 }
 
 //===----------------------------------------------------------------------===//
