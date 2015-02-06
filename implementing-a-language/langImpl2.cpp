@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 
+/*
+  Compile:
+  clang++ -g -O3 langImpl.cpp `/usr/local/Cellar/llvm/3.5.1/bin/llvm-config --cxxflags --ldflags --system-libs --libs core` -o langImpl
+*/
+
 //===----------------------------------------------------------------------===//
 // Lexer
 //===----------------------------------------------------------------------===//
@@ -84,21 +89,26 @@ public:
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST {
+  double Val;
 public:
-  NumberExprAST(double val) {}
+  NumberExprAST(double val): Val(val) {}
 };
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
   std::string Name;
 public:
-  VariableExprAST(const std::string &name) : Name(name) {}
+  VariableExprAST(const std::string &name)
+    : Name(name) {}
 };
 
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
+  char Op;
+  ExprAST *LHS, *RHS;
 public:
-  BinaryExprAST(char op, ExprAST *lhs, ExprAST *rhs) {}
+  BinaryExprAST(char op, ExprAST *lhs, ExprAST *rhs)
+    : Op(op), LHS(lhs), RHS(rhs) {}
 };
 
 /// CallExprAST - Expression class for function calls.
@@ -119,13 +129,15 @@ class PrototypeAST {
 public:
   PrototypeAST(const std::string &name, const std::vector<std::string> &args)
     : Name(name), Args(args) {}
-  
 };
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST {
+  PrototypeAST *Proto;
+  ExprAST *Body;
 public:
-  FunctionAST(PrototypeAST *proto, ExprAST *body) {}
+  FunctionAST(PrototypeAST *proto, ExprAST *body)
+    : Proto(proto), Body(body) {}
 };
 } // end anonymous namespace
 
